@@ -85,3 +85,8 @@ secrets/*
 
 # Mac files
 .DS_Store
+
+# Local data (Kaggle dataset) and MLflow tracking
+data/
+mlruns/
+mlflow.db
