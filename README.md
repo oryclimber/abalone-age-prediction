@@ -62,6 +62,46 @@ Traditionally, determining an abalone's age requires:
    uv run pre-commit run --all-files
    ```
 
+## ▶️ Running the Training Pipeline (Prefect)
+
+The training code in `src/modelling/` is a [Prefect](https://docs.prefect.io/) flow (`main.py`) made of tasks (loading, preprocessing, training, evaluation, saving). Run every command below **from the repository root**, with `uv run` so the project environment is used.
+
+### 1. Start the Prefect server and UI
+
+In a dedicated terminal (leave it running):
+
+```bash
+uv run prefect server start
+```
+
+The UI is then available at <http://127.0.0.1:4200>. In another terminal, point Prefect at this server (once):
+
+```bash
+uv run prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api
+```
+
+### 2. Run the training flow once
+
+```bash
+uv run python src/modelling/main.py data/abalone.csv
+```
+
+This trains the model, prints the test metrics and saves the model to `src/web_service/local_objects/model.pkl`. The flow run and each of its tasks appear in the UI under **Runs**.
+
+### 3. Deploy the flow for regular retraining
+
+```bash
+uv run python src/modelling/deployment.py
+```
+
+This registers the deployment `Model training Deployment` and keeps a process running that executes it every Sunday at midnight (cron `0 0 * * 0`). In the UI, open **Deployments** to see the schedule, or click **Run → Quick run** to trigger a retraining immediately and follow it in **Runs**.
+
+### Troubleshooting
+
+- `Failed to reach API at http://...:4200/api`: the server is not running (step 1) or `PREFECT_API_URL` points to the wrong address.
+- `Found incompatible versions: client ... server ...`: another Prefect install is serving on port 4200. Stop it and start the server with `uv run prefect server start`.
+- `fastapi` is pinned below 0.155 in `pyproject.toml` because Prefect 3.8.8 is not compatible with newer FastAPI releases. Run `uv sync` after pulling.
+
 ## 📋 What You'll Build
 
 By the end of this project, you'll have created:
@@ -198,12 +238,12 @@ Your project will be evaluated on:
 When you're done, your repository should contain:
 
 ✅ **Automated Training Pipeline**
-- [ ] Prefect workflows for model training
+- [x] Prefect workflows for model training
 - [ ] Separate modules for training and inference
 - [ ] Reproducible model and encoder generation
 
 ✅ **Automated Deployment**
-- [ ] Prefect deployment for regular retraining
+- [x] Prefect deployment for regular retraining
 
 ✅ **Production API**
 - [ ] Working REST API for predictions

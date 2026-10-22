@@ -3,16 +3,17 @@
 import argparse
 from pathlib import Path
 
+from config import MODEL_PATH, RANDOM_STATE, TEST_SIZE
+from predicting import predict
+from prefect import flow
 from preprocessing import load_data, remove_inconsistent_rows, split_features_target
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from training import evaluate, train_model
+from training import build_pipeline, evaluate, train_model
 from utils import pickle_object
 
-MODEL_PATH = Path("src/web_service/local_objects/model.pkl")
-TEST_SIZE = 0.2
-RANDOM_STATE = 42
 
-
+@flow(name="Train and save model")
 def main(trainset_path: Path) -> None:
     """Train a model using the data at the given path and save the model (pickle)."""
     # Read data
@@ -26,14 +27,22 @@ def main(trainset_path: Path) -> None:
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
-    metrics = evaluate(y_test, train_model(X_train, y_train).predict(X_test))
+
+    eval_pipe = build_pipeline(LinearRegression())
+    eval_model = train_model(X_train, y_train, eval_pipe)
+
+    y_pred = predict(eval_model, X_test)
+    metrics = evaluate(y_test, y_pred)
     print(f"Test metrics: {metrics}")
 
-    # Train model on the full dataset
-    model = train_model(X, y)
+    # Build final pipeline
+    final_pipe = build_pipeline(LinearRegression())
+
+    # Train final model on the full dataset
+    final_model = train_model(X, y, final_pipe)
 
     # Pickle model --> The model should be saved in pkl format the `src/web_service/local_objects` folder
-    pickle_object(model, MODEL_PATH)
+    pickle_object(final_model, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
 
 
