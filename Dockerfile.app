@@ -1,3 +1,14 @@
-# Make sure to check bin/run_services.sh, which can be used here
+FROM python:3.11-slim
+WORKDIR /app_home
 
-# Do not forget to expose the right ports! (Check the PR_4.md)
+COPY pyproject.toml uv.lock /app_home/
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --no-dev
+ENV PATH="/app_home/.venv/bin:$PATH"
+
+COPY ./src/web_service /app_home/src/web_service
+COPY ./bin /app_home/bin
+
+EXPOSE 8001 4201
+
+CMD ["bash", "bin/run_services.sh"]
