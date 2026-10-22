@@ -31,3 +31,6 @@ dev = [
     "ruff>=0.17.1",
     "seaborn>=0.13.2",
 ]
+
+[tool.uv]
+package = false
