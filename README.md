@@ -4,7 +4,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)]()
 [![Linting: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-informational?logo=pre-commit&logoColor=white)](https://github.com/artefactory/xhec-mlops-project-student/blob/main/.pre-commit-config.yaml)
+[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-informational?logo=pre-commit&logoColor=white)](.pre-commit-config.yaml)
 </div>
 
 ## 👥 Team (Groupe 5)
@@ -18,60 +18,45 @@
 
 ## 🎯 Project Overview
 
-Welcome to your MLOps project! In this hands-on project, you'll build a complete machine learning system to predict the age of abalone (a type of sea snail) using physical measurements instead of the traditional time-consuming method of counting shell rings under a microscope.
+Determining the age of an abalone (a sea snail) traditionally means cutting its shell, staining it and counting the rings under a microscope. This project predicts the number of rings, and therefore the age (rings + 1.5 years), from easy-to-measure physical features (sex, size and weights).
 
-**Your Mission**: Transform a simple ML model into a production-ready system with automated training, deployment, and prediction capabilities.
+It contains:
+- **EDA and modelling notebooks** (`notebooks/`)
+- **A training pipeline** orchestrated with Prefect, with a deployment that retrains the model every week (`src/modelling/`)
+- **A prediction API** built with FastAPI and Pydantic, packaged with Docker (`src/web_service/`, `Dockerfile.app`)
 
-## 📊 About the Dataset
-
-Traditionally, determining an abalone's age requires:
-1. Cutting the shell through the cone
-2. Staining it
-3. Counting rings under a microscope (very time-consuming!)
-
-**Your Goal**: Use easier-to-obtain physical measurements (shell weight, diameter, etc.) to predict the age automatically.
-
-📥 **Download**: Get the dataset from the [Kaggle page](https://www.kaggle.com/datasets/rodolfomendes/abalone-dataset)
-
-
-## 🚀 Quick Start
+## 🚀 Setup
 
 ### Prerequisites
-- GitHub account
-- [Kaggle account](https://www.kaggle.com/account/login?phase=startRegisterTab&returnUrl=%2F) (for dataset download)
 - Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- [Docker](https://docs.docker.com/get-docker/) (to run the API in a container)
+- [Kaggle account](https://www.kaggle.com/account/login?phase=startRegisterTab&returnUrl=%2F) (only to retrain the model)
 
-### Setup Steps
+### Install
 
-1. **Fork this repository**
-   - ⚠️ **Important**: Uncheck "Copy the `main` branch only" to get all project branches
+```bash
+git clone https://github.com/oryclimber/abalone-age-prediction.git
+cd abalone-age-prediction
 
-2. **Add your team members** as admins to your forked repository
+# Create the virtual environment (.venv), install app + dev dependencies and the pre-commit hooks
+make install
+```
 
-3. **Set up your development environment**:
-   ```bash
-   # Create the virtual environment (.venv) and install app + dev dependencies
-   uv sync
-   source .venv/bin/activate # on Windows: .venv\Scripts\activate
+### Data
 
-   # Register the pre-commit hooks with git (once per clone)
-   uv run pre-commit install
-
-   # Optional: run all hooks once on the whole repo
-   uv run pre-commit run --all-files
-   ```
+Download `abalone.csv` from the [Kaggle page](https://www.kaggle.com/datasets/rodolfomendes/abalone-dataset) and place it at `data/abalone.csv`. It is only needed to retrain the model: a trained model is already committed in `src/web_service/local_objects/model.pkl`.
 
 ## ▶️ Running the Training Pipeline (Prefect)
 
-The training code in `src/modelling/` is a [Prefect](https://docs.prefect.io/) flow (`main.py`) made of tasks (loading, preprocessing, training, evaluation, saving). Run every command below **from the repository root**, with `uv run` so the project environment is used.
+The training code in `src/modelling/` is a [Prefect](https://docs.prefect.io/) flow (`main.py`) made of tasks (loading, preprocessing, training, evaluation, saving). Run every command below **from the repository root**. Each step shows the `make` shortcut and the full command.
 
 ### 1. Start the Prefect server and UI
 
 In a dedicated terminal (leave it running):
 
 ```bash
-uv run prefect server start
+make prefect-server   # uv run prefect server start
 ```
 
 The UI is then available at <http://127.0.0.1:4200>. In another terminal, point Prefect at this server (once):
@@ -83,7 +68,7 @@ uv run prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api
 ### 2. Run the training flow once
 
 ```bash
-uv run python src/modelling/main.py data/abalone.csv
+make train   # uv run python src/modelling/main.py data/abalone.csv
 ```
 
 This trains the model, prints the test metrics and saves the model to `src/web_service/local_objects/model.pkl`. The flow run and each of its tasks appear in the UI under **Runs**.
@@ -91,7 +76,7 @@ This trains the model, prints the test metrics and saves the model to `src/web_s
 ### 3. Deploy the flow for regular retraining
 
 ```bash
-uv run python src/modelling/deployment.py
+make deploy   # uv run python src/modelling/deployment.py
 ```
 
 This registers the deployment `Model training Deployment` and keeps a process running that executes it every Sunday at midnight (cron `0 0 * * 0`). In the UI, open **Deployments** to see the schedule, or click **Run → Quick run** to trigger a retraining immediately and follow it in **Runs**.
@@ -102,79 +87,51 @@ This registers the deployment `Model training Deployment` and keeps a process ru
 - `Found incompatible versions: client ... server ...`: another Prefect install is serving on port 4200. Stop it and start the server with `uv run prefect server start`.
 - `fastapi` is pinned below 0.155 in `pyproject.toml` because Prefect 3.8.8 is not compatible with newer FastAPI releases. Run `uv sync` after pulling.
 
-## 📋 What You'll Build
+## 🌐 Running the Prediction API
 
-By the end of this project, you'll have created:
+The API (`src/web_service/`) loads `src/web_service/local_objects/model.pkl` and exposes:
+- `GET /`: health check
+- `POST /predict`: predicts the number of rings and the age of one abalone. Inputs are validated with Pydantic: `sex` must be `M`, `F` or `I` (infant) and all measurements must be positive.
 
-### 🤖 **Automated ML Pipeline**
-- Training workflows using Prefect
-- Automatic model retraining on schedule
-- Reproducible model and data processing
+### With Docker (recommended)
 
-### 🌐 **Prediction API**
-- REST API for real-time predictions
-- Input validation with Pydantic
-- Docker containerization
-
-### 📊 **Production-Ready Code**
-- Clean, well-documented code
-- Automated testing and formatting
-- Proper error handling
-
-## 📝 How to Work on This Project
-
-### The Branch-by-Branch Approach
-
-This project is organized into numbered branches, each representing a step in building your MLOps system. Think of it like a guided tutorial where each branch teaches you something new!
-
-**Here's how it works**:
-
-1. **Each branch = One pull request** with specific tasks
-2. **Follow the numbers** (branch_0, branch_1, etc.) in order
-3. **Read the PR instructions** (PR_0.md, PR_1.md, etc.) before starting
-4. **Complete all TODOs** in that branch's code
-5. **Create a pull request** when done
-6. **Merge and move to the next branch**
-
-### Step-by-Step Workflow
-
-For each numbered branch:
+The container runs both the API and a Prefect server (`bin/run_services.sh`).
 
 ```bash
-# Switch to the branch
-git checkout branch_number_i
-
-# Get latest changes (except for branch_0)
-git pull origin main
-# Note: A VIM window might open - just type ":wq" to close it
-
-# Push your branch
-git push
+make docker-build   # docker build -t abalone-api -f Dockerfile.app .
+make docker-run     # docker run --rm -p 0.0.0.0:8000:8001 -p 0.0.0.0:4200:4201 abalone-api
 ```
 
-Then:
-1. 📖 Read the PR_i.md file carefully
-2. 💻 Complete all the TODOs in the code
-3. 🔧 Test your changes
-4. 📤 Open **ONE** pull request to your main branch
-5. ✅ Merge the pull request
-6. 🔄 Move to the next branch
+- API docs (try `/predict` from the browser): <http://localhost:8000/docs>
+- Prefect UI: <http://localhost:4200>
 
-> **💡 Pro Tip**: Always integrate your previous work when starting a new branch (except branch_0)!
+Stop the container with `Ctrl+C`. Stop any local Prefect server first (`make prefect-server`), as both use port 4200.
 
-### 🔍 Understanding Pull Requests
+### Locally (without Docker)
 
-Pull Requests (PRs) are how you propose and review changes before merging them into your main codebase. They're essential for team collaboration!
+```bash
+make api   # uv run uvicorn src.web_service.main:app --port 8001
+```
 
-**Important**: When creating a PR, make sure you're merging into YOUR forked repository, not the original:
+The API docs are then available at <http://localhost:8001/docs>.
 
-❌ **Wrong** (merging to original repo):
-![PR Wrong](assets/PR_wrong.png)
+### Example request
 
-✅ **Correct** (merging to your fork):
-![PR Right](assets/PR_right.png)
+With Docker (use port `8001` when running locally):
 
-## 💡 Development Tips
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"sex": "M", "length": 0.455, "diameter": 0.365, "height": 0.095, "whole_weight": 0.514, "shucked_weight": 0.2245, "viscera_weight": 0.101, "shell_weight": 0.15}'
+```
+
+Response:
+
+```json
+{"predicted_rings": 8.90, "predicted_age": 10.40}
+```
+
+## 💡 Development
 
 ### Managing Dependencies
 
@@ -202,59 +159,3 @@ uv sync
 - If a hook fails or modifies files, the commit is aborted: review the changes, `git add` them and commit again
 - Run all hooks manually with `uv run pre-commit run --all-files`
 - The same hooks run in CI (`.github/workflows/ci.yaml`) on every push and pull request
-- Remove all TODOs and unused code before final submission
-- Use clear variable names and add docstrings
-
-## 📊 Evaluation Criteria
-
-Your project will be evaluated on:
-
-### 🔍 **Code Quality**
-- Clean, readable code structure
-- Proper naming conventions
-- Good use of docstrings and type hints
-
-### 🎨 **Code Formatting**
-- Consistent style (automated with pre-commit)
-- Professional presentation
-
-### ⚙️ **Functionality**
-- Code runs without errors
-- All requirements implemented correctly
-
-### 📖 **Documentation & Reproducibility**
-- Clear README with setup instructions
-- Team member names and GitHub usernames
-- Step-by-step instructions to run everything
-
-### 🤝 **Collaboration**
-- Effective use of Pull Requests
-- Good teamwork and communication
-
----
-
-## 🎯 Final Deliverables Checklist
-
-When you're done, your repository should contain:
-
-✅ **Automated Training Pipeline**
-- [x] Prefect workflows for model training
-- [ ] Separate modules for training and inference
-- [ ] Reproducible model and encoder generation
-
-✅ **Automated Deployment**
-- [x] Prefect deployment for regular retraining
-
-✅ **Production API**
-- [ ] Working REST API for predictions
-- [ ] Pydantic input validation
-- [ ] Docker containerization
-
-✅ **Professional Documentation**
-- [ ] Updated README with team info
-- [ ] Clear setup and run instructions
-- [ ] All TODOs removed from code
-
----
-
-**Ready to start? Head to branch_0 and read PR_0.md for your first task! 🚀**
