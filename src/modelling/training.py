@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
-from preprocessing import CATEGORICAL_FEATURES, NUMERICAL_FEATURES
+from config import CATEGORICAL_FEATURES, NUMERICAL_FEATURES
+from prefect import task
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
+@task(name="Build pipeline")
 def build_pipeline(model) -> Pipeline:
     """Build a pipeline chaining the preprocessing steps and the given regressor."""
     preprocessor = ColumnTransformer(
@@ -23,13 +24,14 @@ def build_pipeline(model) -> Pipeline:
     return Pipeline(steps=[("preprocessor", preprocessor), ("model", model)])
 
 
-def train_model(X: pd.DataFrame, y: pd.Series) -> Pipeline:
+@task(name="Train model")
+def train_model(X: pd.DataFrame, y: pd.Series, pipeline: Pipeline) -> Pipeline:
     """Train a linear regression pipeline (preprocessing + model) on the given data."""
-    pipeline = build_pipeline(LinearRegression())
     pipeline.fit(X, y)
     return pipeline
 
 
+@task(name="Evaluate model")
 def evaluate(y_true: pd.Series, y_pred: np.ndarray) -> dict[str, float]:
     """Compute the regression metrics used to compare the models."""
     return {
